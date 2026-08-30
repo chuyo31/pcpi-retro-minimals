@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# Ejecutable portable publicado (va a Releases, no al repo)
+*.exe
+
+# Instalador del SDK / binarios grandes
+dotnet-sdk-*.exe
+
+# Notas / scratch locales
+prompt/
+
+# Varios
+*.user
+*.suo
+.vs/

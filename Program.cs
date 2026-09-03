@@ -264,7 +264,14 @@ namespace PCPI_Minimalist
             {
                 Category = cat,
                 Name = name,
-                Command = "winget install --id " + id + " -e --accept-source-agreements --accept-package-agreements"
+                // --disable-interactivity : nunca se queda esperando un [S/N] (PCPI no tiene consola);
+                //                           sin esto, un choque de hash del manifiesto -> -1978335215.
+                // --no-upgrade            : si el programa YA está instalado, no intenta actualizarlo
+                //                           (PCPI es un instalador post-formateo, no un actualizador);
+                //                           evita la ruta de "upgrade" que es la que suele fallar por hash.
+                Command = "winget install --id " + id +
+                          " -e --accept-source-agreements --accept-package-agreements" +
+                          " --disable-interactivity --no-upgrade"
             });
 
             // ---- Antivirus ----
@@ -992,6 +999,20 @@ namespace PCPI_Minimalist
             int pct = 0;
             ProgressUpdate(BuildBar(pct) + "  " + item.Name, currentTheme.Accent);
 
+            // Guarda las últimas líneas útiles de winget para mostrarlas si falla.
+            var tail = new Queue<string>();
+            void Capture(string line)
+            {
+                if (string.IsNullOrWhiteSpace(line)) return;
+                line = line.Trim();
+                if (line.Length == 0 || line.All(ch => ch == '-' || ch == '\\' || ch == '/' || ch == '|' || ch == '.')) return;
+                lock (tail)
+                {
+                    tail.Enqueue(line);
+                    while (tail.Count > 8) tail.Dequeue();
+                }
+            }
+
             var tcs = new TaskCompletionSource<int>();
             Process p;
             try
@@ -1006,12 +1027,14 @@ namespace PCPI_Minimalist
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = Encoding.UTF8,
+                        StandardErrorEncoding = Encoding.UTF8
                     }
                 };
                 p.Exited += (s, e) => { try { tcs.TrySetResult(p.ExitCode); } catch { tcs.TrySetResult(-1); } };
-                p.OutputDataReceived += (s, e) => { };
-                p.ErrorDataReceived += (s, e) => { };
+                p.OutputDataReceived += (s, e) => Capture(e.Data);
+                p.ErrorDataReceived += (s, e) => Capture(e.Data);
                 p.Start();
                 p.BeginOutputReadLine();
                 p.BeginErrorReadLine();
@@ -1034,15 +1057,52 @@ namespace PCPI_Minimalist
             }
 
             int code = tcs.Task.Result;
-            bool ok = code == 0;
-            if (ok)
+
+            if (code == 0)
+            {
                 ProgressUpdate(BuildBar(100) + "  " + item.Name + "  ·  OK", currentTheme.Accent);
+                ProgressEnd();
+            }
+            else if (IsAlreadyInstalled(code))
+            {
+                ProgressUpdate(BuildBar(100) + "  " + item.Name + "  ·  YA INSTALADO", currentTheme.Accent);
+                ProgressEnd();
+            }
             else
-                ProgressUpdate(BuildBar(pct) + "  " + item.Name + "  ·  ERROR (" + code + ")", Color.Red);
-            ProgressEnd();
+            {
+                string why = WingetExplain(code);
+                ProgressUpdate(BuildBar(pct) + "  " + item.Name + "  ·  ERROR (" + code + ")" + (why.Length > 0 ? " " + why : ""), Color.Red);
+                ProgressEnd();
+                string[] snap;
+                lock (tail) snap = tail.ToArray();
+                foreach (var l in snap) LogUI("      " + l, true);
+            }
 
             try { p.Dispose(); } catch { }
-            return ok;
+            return code == 0 || IsAlreadyInstalled(code);
+        }
+
+        // winget: "ya instalado" / "no hay actualizacion aplicable" -> para PCPI es un OK.
+        private static bool IsAlreadyInstalled(int code) =>
+            code == unchecked((int)0x8A150061) ||   // A package version is already installed
+            code == unchecked((int)0x8A150044) ||   // No applicable update found
+            code == unchecked((int)0x8A150076);     // No newer package versions available
+
+        private static string WingetExplain(int code)
+        {
+            switch (code)
+            {
+                case unchecked((int)0x8A150011): return "· hash del instalador no coincide con el manifiesto de winget (paquete 'evergreen' desfasado; reintenta en unos dias o instalalo a mano)";
+                case unchecked((int)0x8A15000A): return "· requiere ejecutar PCPI como administrador";
+                case unchecked((int)0x8A15002B): return "· no hay instalador aplicable para este equipo";
+                case unchecked((int)0x8A150014): return "· hay otra instalacion en curso";
+                case unchecked((int)0x8A150109): return "· cancelado";
+                case unchecked((int)0x8A150102): return "· descarga fallida (sin conexion?)";
+                case 1603: return "· fallo del instalador MSI (1603)";
+                case 1618: return "· otra instalacion MSI en curso (1618)";
+                case -1: return "· no se pudo lanzar winget (¿instalado?)";
+                default: return "";
+            }
         }
 
         // ================= MÓDULO COPIAR / RESTAURAR DRIVERS =================

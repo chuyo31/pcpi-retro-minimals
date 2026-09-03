@@ -128,7 +128,9 @@ namespace PCPI_Minimalist
 |  __/| |___|  __/| |
 |_|    \____|_|  |___|";
 
-        private const string TAGLINE = "v2.0  ENGINE";
+        // Versión visible de la app. Cambiar SOLO aquí (y en el .exe con -p:Version=x).
+        private const string APP_VERSION = "0.0.5";
+        private const string TAGLINE = "v" + APP_VERSION + "  ENGINE";
         private const string CREDIT = "hecho con ❤️ by_Chuyo31";
 
         // Fichero de preferencias (recuerda el tema/color de énfasis)
@@ -436,7 +438,7 @@ namespace PCPI_Minimalist
         {
             // Ventana Principal
             this.AutoScaleMode = AutoScaleMode.None;   // layout a coordenadas fijas
-            this.Text = "PCPI v2.0 - Standalone System Installer";
+            this.Text = "PCPI Retro Minimals v" + APP_VERSION + " - Standalone System Installer";
             this.Size = new Size(904, 720);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;

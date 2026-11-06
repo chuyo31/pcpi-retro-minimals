@@ -286,6 +286,8 @@ namespace PCPI_Minimalist
             Add("Antivirus", "ClamWin", "ClamWin.ClamWin");
             Add("Antivirus", "Spybot Search & Destroy", "Safer-Networking.Spybot.3");
             Add("Antivirus", "SUPERAntiSpyware", "SUPERAntiSpyware.SUPERAntiSpyware");
+            Add("Antivirus", "Avira Free Security", "Avira.Avira");
+            Add("Antivirus", "ESET NOD32 Antivirus", "ESET.NOD32AntiVirus");
 
             // ---- Navegadores ----
             Add("Navegadores", "Google Chrome", "Google.Chrome");
@@ -348,6 +350,8 @@ namespace PCPI_Minimalist
             Add("Multimedia", "Blender", "BlenderFoundation.Blender");
             Add("Multimedia", "Kdenlive", "KDE.Kdenlive");
             Add("Multimedia", "Shotcut", "Meltytech.Shotcut");
+            Add("Multimedia", "ShareX", "ShareX.ShareX");
+            Add("Multimedia", "Greenshot", "Greenshot.Greenshot");
 
             // ---- Editar Fotos ----
             Add("Editar Fotos", "GIMP", "GIMP.GIMP");
@@ -407,6 +411,8 @@ namespace PCPI_Minimalist
             Add("Gaming", "Playnite", "Playnite.Playnite");
             Add("Gaming", "Heroic Games Launcher", "HeroicGamesLauncher.HeroicGamesLauncher");
             Add("Gaming", "Parsec", "Parsec.Parsec");
+            Add("Gaming", "Minecraft Launcher", "Mojang.MinecraftLauncher");
+            Add("Gaming", "Amazon Games", "Amazon.Games");
 
             // ---- Música ----
             Add("Música", "Spotify", "Spotify.Spotify");
@@ -432,6 +438,7 @@ namespace PCPI_Minimalist
             Add("Chat", "Element", "Element.Element");
             Add("Chat", "Mozilla Thunderbird", "Mozilla.Thunderbird");
             Add("Chat", "Viber", "Viber.Viber");
+            Add("Chat", "LINE", "LINE.LINE");
         }
 
         private void InitializeComponentLayout()
@@ -937,6 +944,22 @@ namespace PCPI_Minimalist
                 return;
             }
 
+            SetBusy(true, "COMPROBANDO WINGET...");
+            string wingetProblem = await CheckWingetAsync();
+            if (wingetProblem != null)
+            {
+                SetBusy(false, "EN ESPERA");
+                AppendLog("==========================================================");
+                AppendLog("NO SE PUEDE INSTALAR: " + wingetProblem, true);
+                AppendLog("==========================================================");
+                MessageBox.Show(
+                    wingetProblem + Environment.NewLine + Environment.NewLine +
+                    "Instala/actualiza 'Instalador de aplicaciones' (App Installer) desde la Microsoft Store " +
+                    "y vuelve a intentarlo.",
+                    "PCPI - Winget no disponible", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             SetBusy(true, "INSTALANDO...");
             AppendLog("==========================================================");
             AppendLog($"INICIANDO INSTALACIÓN DE {seleccionados.Count} PROGRAMAS...");
@@ -955,6 +978,51 @@ namespace PCPI_Minimalist
             AppendLog($"PROCESO FINALIZADO. OK: {okCount}  ·  FALLOS: {failCount}", failCount > 0);
             AppendLog("==========================================================");
             SetBusy(false, "EN ESPERA");
+        }
+
+        // Comprueba que winget existe y responde antes de lanzar ninguna instalación.
+        // Sin esto, en PCs sin App Installer (Windows N/LTSC, cuentas restringidas, etc.)
+        // cada programa seleccionado fallaba por separado con el mismo motivo real.
+        private async Task<string> CheckWingetAsync()
+        {
+            Process p;
+            var tcs = new TaskCompletionSource<int>();
+            try
+            {
+                p = new Process
+                {
+                    EnableRaisingEvents = true,
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = "/c winget --version",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                p.Exited += (s, e) => { try { tcs.TrySetResult(p.ExitCode); } catch { tcs.TrySetResult(-1); } };
+                p.Start();
+            }
+            catch
+            {
+                return "No se pudo ejecutar 'winget' en este equipo (cmd.exe no disponible).";
+            }
+
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(8000));
+            if (completed != tcs.Task)
+            {
+                try { p.Kill(); } catch { }
+                return "'winget' no respondió a tiempo. Puede faltar el componente 'Instalador de aplicaciones' (App Installer).";
+            }
+
+            try { p.Dispose(); } catch { }
+            int code = tcs.Task.Result;
+            if (code != 0)
+                return "'winget' no está disponible en este equipo (código " + code + "). Falta o es demasiado antiguo 'Instalador de aplicaciones' (App Installer).";
+
+            return null;
         }
 
         // ---- Barra de progreso + porcentaje por aplicación (en color de acento) ----

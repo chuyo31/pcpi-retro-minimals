@@ -129,7 +129,7 @@ namespace PCPI_Minimalist
 |_|    \____|_|  |___|";
 
         // Versión visible de la app. Cambiar SOLO aquí (y en el .exe con -p:Version=x).
-        private const string APP_VERSION = "0.0.5";
+        private const string APP_VERSION = "0.0.6";
         private const string TAGLINE = "v" + APP_VERSION + "  ENGINE";
         private const string CREDIT = "hecho con ❤️ by_Chuyo31";
 
